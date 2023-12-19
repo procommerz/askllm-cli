@@ -8,7 +8,16 @@ It requires you to have an OpenAI API key, from which you will need a developer 
 Privacy is a sensitive issue when it comes to personal AI requests. That's why this tool is designed as a simple
 one-page app, that you can easily audit and compile yourself. It does not send any data to any server, except the OpenAI API.
 
-## Installation
+## Installation with Homebrew
+
+On Mac with homebrew, just run the following:
+
+```bash
+brew tap procommerz/askllm
+brew install askllm
+```
+
+## Installation from the Repository
 
 First `cd` to the cloned repositoty.
 
@@ -33,7 +42,7 @@ askllm hello
 
 Edit the config file in ~/.askllm and add your OpenAI API key
 
-## Use it
+## Use It
 
 ```
 askllm How to restart nginx?
