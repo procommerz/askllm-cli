@@ -21,6 +21,7 @@ const defaultModel = "gpt-4-1106-preview"
 var prependSystemInfo bool = false
 var fileAnalysis bool = false
 var fileAnalysisFilename string = ""
+var fileAnalysisFilenames []string
 
 var cli_red = color.New(color.FgRed)
 
@@ -85,20 +86,33 @@ func main() {
 		return
 	}
 
+	// Scan for -f or --file args, and push their values to the fileAnalysisFilenames array:
+	for i, arg := range args {
+		if arg == "-f" || arg == "--file" {
+			fileAnalysis = true
+			fileAnalysisFilenames = append(fileAnalysisFilenames, args[i+1])
+		}
+	}
+
+	// Remove the multiple -f/--file args and their values from the args array,
+	// so that it doesn't get added to the prompt string:
+	removed := true
+	for removed == true {
+		removed = false
+		for i, arg := range args {
+			if arg == "-f" || arg == "--file" {
+				args = append(args[:i], args[i+2:]...)
+				removed = true
+			}
+		}
+	}
+
 	// Check for special arguments,
 	// if the first token is "-s" or "--system-info",
 	// set prependSystemInfo to true:
 	if args[0] == "-s" || args[0] == "--system" {
 		prependSystemInfo = true
 		args = args[1:]
-	}
-
-	// -f argument allows asking a question about a specific file,
-	// it's contents will be fed to the OpenAI API as part of the prompt:
-	if args[0] == "-f" || args[0] == "--file" {
-		fileAnalysis = true
-		fileAnalysisFilename = args[1]
-		args = args[2:]
 	}
 
 	// -f argument allows asking a question about a specific file,
@@ -111,7 +125,7 @@ func main() {
 	if args[0] == "-h" || args[0] == "--help" {
 		fmt.Println("Usage: askllm [-s] [-f filename] question. OpenAI API key is must be set in the ~/.askllm file")
 		fmt.Println("  -s, --system			Prepend the question with system info from ~/.askllm")
-		fmt.Println("  -f, --file			Add the file contents to the prompt for analysis")
+		fmt.Println("  -f, --file			Add multiples file to the prompt for analysis, like -f ./file1 -f ../file2")
 		fmt.Println("  -m, --more			Triples the max_tokens value, for longer answers")
 		fmt.Println("  -h, --help			Show this help")
 		return
@@ -154,30 +168,65 @@ func sendStreamingChatRequest(prompt string) {
 		})
 	}
 
+	// In case of file analysis, add the files' contents to the prompt:
 	if fileAnalysis == true {
-		// Read the fileAnalysisFilename file into a string:
-		fileContents, err := os.ReadFile(fileAnalysisFilename)
+		fileContents := []byte{}
+		err := error(nil)
 
-		if err != nil {
-			fmt.Println("Error reading file:", err)
-			return
+		// Check the length of the fileAnalysisFilenames array:
+		if len(fileAnalysisFilenames) == 1 {
+			// Get the filename part of the fileAnalysisFilename:
+			filenameParts := strings.Split(fileAnalysisFilenames[0], "/")
+			onlyFilename := filenameParts[len(filenameParts)-1]
+
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleUser,
+				Content: "My question is about the file " + onlyFilename + ". Here's it's contents:\n",
+			})
+		} else {
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleUser,
+				Content: "My question concerns several files. Below is their contents:\n",
+			})
 		}
 
-		// Get the filename part of the fileAnalysisFilename:
-		filenameParts := strings.Split(fileAnalysisFilename, "/")
-		onlyFilename := filenameParts[len(filenameParts)-1]
+		// For each filename in fileAnalysisFilenames:
+		for _, fileAnalysisFilename = range fileAnalysisFilenames {
+			// Read the fileAnalysisFilename file into a string:
+			fileContents, err = os.ReadFile(fileAnalysisFilename)
 
-		messages = append(messages, openai.ChatCompletionMessage{
-			Role:    openai.ChatMessageRoleUser,
-			Content: "My question is about the file " + onlyFilename + ". Here's it's contents:\n",
-		})
+			lastFile := fileAnalysisFilename == fileAnalysisFilenames[len(fileAnalysisFilenames)-1]
 
-		messages = append(messages, openai.ChatCompletionMessage{
-			Role:    openai.ChatMessageRoleUser,
-			Content: string(fileContents),
-		})
+			if err != nil {
+				fmt.Println("Error reading file:", err)
+				return
+			}
+
+			// Get the filename part of the fileAnalysisFilename:
+			filenameParts := strings.Split(fileAnalysisFilename, "/")
+			onlyFilename := filenameParts[len(filenameParts)-1]
+
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleUser,
+				Content: "File '" + onlyFilename + "':\n",
+			})
+
+			if lastFile == false {
+				messages = append(messages, openai.ChatCompletionMessage{
+					Role:    openai.ChatMessageRoleUser,
+					Content: "```\n" + string(fileContents) + "```\n",
+				})
+			} else {
+				messages = append(messages, openai.ChatCompletionMessage{
+					Role:    openai.ChatMessageRoleUser,
+					Content: "```\n" + string(fileContents) + "```\n" + "\nThat's the end of the file list.\n\n",
+				})
+			}
+
+		}
 	}
 
+	// Append the prompt:
 	messages = append(messages, openai.ChatCompletionMessage{
 		Role:    openai.ChatMessageRoleUser,
 		Content: prompt,
