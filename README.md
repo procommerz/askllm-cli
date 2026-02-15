@@ -42,6 +42,18 @@ askllm hello
 
 Edit the config file in ~/.askllm and add your OpenAI API key
 
+Example `~/.askllm`:
+
+```
+openai_key=REPLACE_WITH_YOUR_ACTUAL_KEY
+max_tokens=300
+system_info=I'm using MacOS Catalina via iTerm2, I'm a beginner CLI user
+model=gpt-4o
+```
+
+Notes:
+- `model` is optional; if missing or empty, the built-in default is used.
+
 ## Use It
 
 ```

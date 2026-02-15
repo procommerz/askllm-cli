@@ -16,7 +16,10 @@ var openAIKey = ""  // Will be filled with the API key from ~/.askllm (openai_ke
 var systemInfo = "" // Will be filled with the system info from ~/.askllm (system_info)
 var maxTokens = 400
 
-const defaultModel = "gpt-4-1106-preview"
+const defaultModel = "gpt-4o"
+
+// model will be filled from ~/.askllm (model). If empty, defaultModel is used.
+var model = ""
 
 var prependSystemInfo bool = false
 var fileAnalysis bool = false
@@ -51,6 +54,11 @@ func main() {
 		// Split the setting into key/value:
 		keyValue := strings.Split(setting, "=")
 
+		// Skip empty/invalid lines
+		if len(keyValue) < 2 {
+			continue
+		}
+
 		// Check if the key is "openai_key":
 		if keyValue[0] == "openai_key" {
 			// Set the global variable:
@@ -67,6 +75,8 @@ func main() {
 				cli_red.Println("Using default value of 400, but please fix the value in the ~/.askllm file")
 				maxTokens = 400
 			}
+		} else if keyValue[0] == "model" {
+			model = strings.TrimSpace(keyValue[1])
 		}
 	}
 
@@ -157,7 +167,7 @@ func sendStreamingChatRequest(prompt string) {
 
 	messages = append(messages, openai.ChatCompletionMessage{
 		Role:    openai.ChatMessageRoleSystem,
-		Content: "Answer the following question in a brief and informative way. Format the output for a bash-like console output.",
+		Content: "Answer the following question in a brief and informative way. Take into account that the output is printed out in a bash terminal.",
 	})
 
 	if prependSystemInfo == true {
@@ -211,18 +221,17 @@ func sendStreamingChatRequest(prompt string) {
 				Content: "File '" + onlyFilename + "':\n",
 			})
 
-			if lastFile == false {
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleUser,
+				Content: "```\n" + string(fileContents) + "```\n",
+			})
+
+			if lastFile == true {
 				messages = append(messages, openai.ChatCompletionMessage{
 					Role:    openai.ChatMessageRoleUser,
-					Content: "```\n" + string(fileContents) + "```\n",
-				})
-			} else {
-				messages = append(messages, openai.ChatCompletionMessage{
-					Role:    openai.ChatMessageRoleUser,
-					Content: "```\n" + string(fileContents) + "```\n" + "\nThat's the end of the file list.\n\n",
+					Content: "That's the end of the file list.\n",
 				})
 			}
-
 		}
 	}
 
@@ -232,14 +241,20 @@ func sendStreamingChatRequest(prompt string) {
 		Content: prompt,
 	})
 
+	selectedModel := defaultModel
+	if strings.TrimSpace(model) != "" {
+		selectedModel = strings.TrimSpace(model)
+	}
+
 	req := openai.ChatCompletionRequest{
-		Model:     defaultModel,
-		MaxTokens: maxTokens,
-		Messages:  messages,
-		Stream:    true,
+		Model:               selectedModel,
+		MaxCompletionTokens: maxTokens,
+		Messages:            messages,
+		Stream:              true,
 	}
 
 	stream, err := client.CreateChatCompletionStream(ctx, req)
+
 	if err != nil {
 		fmt.Printf("CompletionStream error: %v\n", err)
 		return
